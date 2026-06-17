@@ -63,19 +63,21 @@ function minutesFromCron(cron) {
   return Number.isFinite(n) && n > 0 ? n : "";
 }
 
-function normalizeLogStatus(status) {
-  return status === "pending" ? "queued" : status || "";
+function normalizeLogStatus(status, showQueued = false) {
+  if (status === "pending") return showQueued ? "queued" : "failed";
+  if (status === "queued") return showQueued ? "queued" : "failed";
+  return status || "";
 }
 
-function getLogStatusMeta(status) {
-  const normalized = normalizeLogStatus(status);
+function getLogStatusMeta(status, showQueued = false) {
+  const normalized = normalizeLogStatus(status, showQueued);
   if (normalized === "sent") {
     return { label: "sent", className: "ok", Icon: CheckCircle2 };
   }
   if (normalized === "failed") {
     return { label: "failed", className: "bad", Icon: XCircle };
   }
-  return { label: "queued", className: "warn", Icon: Clock };
+  return { label: "sending", className: "warn", Icon: Clock };
 }
 
 const PAGE_SIZE = 10;
@@ -203,6 +205,7 @@ export default function Dashboard({ user }) {
       lastFailed: lastRun?.failed_count ?? settings?.last_run_failed ?? 0,
     };
   }, [lastRun, settings]);
+  const showQueuedLogs = lastRun?.status === "running";
 
   const updateSettings = async (updates) => {
     if (!settings) return;
@@ -242,7 +245,7 @@ export default function Dashboard({ user }) {
   const filteredLogs = useMemo(() => {
     const q = logSearch.toLowerCase().trim();
     return logs.filter((l) => {
-      const statusValue = normalizeLogStatus(l.status);
+      const statusValue = normalizeLogStatus(l.status, showQueuedLogs);
       const matchesSearch =
         !q ||
         (l.student_name || "").toLowerCase().includes(q) ||
@@ -252,7 +255,7 @@ export default function Dashboard({ user }) {
         logStatusFilter === "all" || statusValue === logStatusFilter;
       return matchesSearch && matchesStatus;
     });
-  }, [logs, logSearch, logStatusFilter]);
+  }, [logs, logSearch, logStatusFilter, showQueuedLogs]);
 
   const bdPagination = usePagination(filteredBirthdays);
   const logPagination = usePagination(filteredLogs);
@@ -574,7 +577,6 @@ export default function Dashboard({ user }) {
             onChange={(e) => setLogStatusFilter(e.target.value)}
           >
             <option value="all">All statuses</option>
-            <option value="queued">Queued</option>
             <option value="sent">Sent</option>
             <option value="failed">Failed</option>
           </select>
@@ -597,7 +599,7 @@ export default function Dashboard({ user }) {
               </div>
             ) : (
               logPagination.slice.map((l) => {
-                const statusMeta = getLogStatusMeta(l.status);
+                const statusMeta = getLogStatusMeta(l.status, showQueuedLogs);
                 return (
                   <div key={l.id} className="trow">
                     <div>{formatDateTime(l.created_at)}</div>
