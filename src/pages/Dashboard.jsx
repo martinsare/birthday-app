@@ -63,6 +63,21 @@ function minutesFromCron(cron) {
   return Number.isFinite(n) && n > 0 ? n : "";
 }
 
+function normalizeLogStatus(status) {
+  return status === "pending" ? "queued" : status || "";
+}
+
+function getLogStatusMeta(status) {
+  const normalized = normalizeLogStatus(status);
+  if (normalized === "sent") {
+    return { label: "sent", className: "ok", Icon: CheckCircle2 };
+  }
+  if (normalized === "failed") {
+    return { label: "failed", className: "bad", Icon: XCircle };
+  }
+  return { label: "queued", className: "warn", Icon: Clock };
+}
+
 const PAGE_SIZE = 10;
 
 function usePagination(items) {
@@ -227,13 +242,14 @@ export default function Dashboard({ user }) {
   const filteredLogs = useMemo(() => {
     const q = logSearch.toLowerCase().trim();
     return logs.filter((l) => {
+      const statusValue = normalizeLogStatus(l.status);
       const matchesSearch =
         !q ||
         (l.student_name || "").toLowerCase().includes(q) ||
         (l.recipient_email || "").toLowerCase().includes(q) ||
         (l.date || "").toLowerCase().includes(q);
       const matchesStatus =
-        logStatusFilter === "all" || l.status === logStatusFilter;
+        logStatusFilter === "all" || statusValue === logStatusFilter;
       return matchesSearch && matchesStatus;
     });
   }, [logs, logSearch, logStatusFilter]);
@@ -558,6 +574,7 @@ export default function Dashboard({ user }) {
             onChange={(e) => setLogStatusFilter(e.target.value)}
           >
             <option value="all">All statuses</option>
+            <option value="queued">Queued</option>
             <option value="sent">Sent</option>
             <option value="failed">Failed</option>
           </select>
@@ -579,25 +596,24 @@ export default function Dashboard({ user }) {
                 <span>{logs.length === 0 ? "No emails yet." : "No results match your filter."}</span>
               </div>
             ) : (
-              logPagination.slice.map((l) => (
-                <div key={l.id} className="trow">
-                  <div>{formatDateTime(l.created_at)}</div>
-                  <div>{l.date}</div>
-                  <div>{l.student_name}</div>
-                  <div className="mono">{l.recipient_email}</div>
-                  <div>
-                    <span className={`tag ${l.status === "sent" ? "ok" : "bad"}`}>
-                      {l.status === "sent" ? (
-                        <CheckCircle2 size={11} style={{ marginRight: 4 }} />
-                      ) : (
-                        <XCircle size={11} style={{ marginRight: 4 }} />
-                      )}
-                      {l.status}
-                    </span>
+              logPagination.slice.map((l) => {
+                const statusMeta = getLogStatusMeta(l.status);
+                return (
+                  <div key={l.id} className="trow">
+                    <div>{formatDateTime(l.created_at)}</div>
+                    <div>{l.date}</div>
+                    <div>{l.student_name}</div>
+                    <div className="mono">{l.recipient_email}</div>
+                    <div>
+                      <span className={`tag ${statusMeta.className}`}>
+                        <statusMeta.Icon size={11} style={{ marginRight: 4 }} />
+                        {statusMeta.label}
+                      </span>
+                    </div>
+                    <div className="mono">{l.error || ""}</div>
                   </div>
-                  <div className="mono">{l.error || ""}</div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </div>

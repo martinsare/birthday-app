@@ -31,7 +31,7 @@ create table if not exists public.birthday_email_logs (
   reg_number text not null,
   student_name text not null,
   recipient_email text not null,
-  status text not null check (status in ('pending', 'sent', 'failed')),
+  status text not null check (status in ('queued', 'sent', 'failed')),
   provider_message_id text null,
   error text null,
   created_at timestamptz not null default now()

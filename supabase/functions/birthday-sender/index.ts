@@ -517,10 +517,11 @@ Deno.serve(async (req) => {
 
       for (const email of recipients) {
         const subject = `Birthday notice for ${birthday.name}`;
+        let logId = 0;
         try {
           // Reserve first (prevents double-send across concurrent runs).
           // Dedupe by unique constraint: (date, reg_number, recipient_email)
-          const pendingRows = await supabaseUpsertIgnoreDuplicates(
+          const queuedRows = await supabaseUpsertIgnoreDuplicates(
             supabaseUrl,
             serviceRoleKey,
             "birthday_email_logs",
@@ -530,7 +531,7 @@ Deno.serve(async (req) => {
               reg_number: birthday.reg_number,
               student_name: birthday.name,
               recipient_email: email,
-              status: "pending",
+              status: "queued",
               provider_message_id: null,
               error: null,
               created_at: nowIso(),
@@ -538,8 +539,8 @@ Deno.serve(async (req) => {
             "date,reg_number,recipient_email",
           );
 
-          const pending = pendingRows?.[0];
-          const logId = Number(pending?.id ?? 0);
+          const queued = queuedRows?.[0];
+          logId = Number(queued?.id ?? 0);
           if (!logId) {
             // Already reserved/sent earlier today.
             continue;
@@ -573,24 +574,24 @@ Deno.serve(async (req) => {
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           try {
-            // If the reservation insert failed due to duplicates we would have skipped,
-            // but for other failures, try to write a standalone failed record.
-            await supabaseUpsertIgnoreDuplicates(
+            const match = logId
+              ? { id: `eq.${logId}` }
+              : {
+                date: `eq.${portalData.date}`,
+                reg_number: `eq.${birthday.reg_number}`,
+                recipient_email: `eq.${email}`,
+              };
+            await supabaseUpdate(
               supabaseUrl,
               serviceRoleKey,
               "birthday_email_logs",
+              match,
               {
                 run_id: runId || null,
-                date: portalData.date,
-                reg_number: birthday.reg_number,
-                student_name: birthday.name,
-                recipient_email: email,
                 status: "failed",
                 provider_message_id: null,
                 error: message,
-                created_at: nowIso(),
               },
-              "date,reg_number,recipient_email",
             );
           } catch {
             // ignore logging failures
